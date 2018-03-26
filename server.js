@@ -2,6 +2,11 @@ const express = require("express");
 const app = express();
 
 var Redmine = require("node-redmine");
+var Mustache = require("mustache");
+
+var fs = require("fs");
+var path = require("path");
+
 var RSS = require("rss");
 
 var cleanUrl = url =>
@@ -17,29 +22,45 @@ function getRSS(url, apiKey) {
   /**
    * Dump issue
    */
-  var add_issue = function(issue, feed) {
+  var add_issue = function(issue, feed, template) {
     console.log(issue);
-    console.log(issue.journals);
+    issue.journals.forEach(j => console.log(j, j.details));
+
+    issue.journals.forEach((j, index) => {
+      j.index = index + 1;
+      j.url = `${cleaned_url}/issues/${issue.id}#change-${j.id}`;
+    });
+
+    const issue_url = issue.journals.length
+      ? issue.journals[issue.journals.length - 1].url
+      : `${cleaned_url}/issues/${issue.id}`;
+
     feed.item({
       title: `[${issue.project.name}] #${issue.id} - ${issue.subject} [${
         issue.tracker.name
       }]`,
       categories: [issue.tracker.name],
-      url: `${cleaned_url}/issues/${issue.id}${
-        issue.journals.length
-          ? "#change-" + issue.journals[issue.journals.length - 1].id
-          : ""
-      }`,
+      url: issue_url,
       date: issue.updated_on.toUTCString(),
       author: (issue.journals.length
         ? issue.journals[issue.journals.length - 1].user
         : issue.author
-      ).name
+      ).name,
+      description: Mustache.render(
+        template,
+        Object.assign(
+          {
+            issue_url,
+            reversed_journals: issue && [].concat(issue.journals).reverse()
+          },
+          issue
+        )
+      )
     });
   };
 
   return new Promise((resolve, reject) => {
-    redmine.issues({ limit: 30 }, function(err, data) {
+    redmine.issues({ limit: 30, sort: "id:desc" }, function(err, data) {
       if (err) return reject(err);
 
       const issues = data.issues.map(issue => {
@@ -53,8 +74,10 @@ function getRSS(url, apiKey) {
                   Object.assign(
                     {},
                     issue,
-                    Object.assign({}, data.issue, {
-                      journals: (Array.isArray(data.issue.journals)
+                    Object.assign({}, data && data.issue, {
+                      journals: (Array.isArray(
+                        data && data.issue && data.issue.journals
+                      )
                         ? data.issue.journals
                         : []
                       ).sort((a, b) => a.id - b.id)
@@ -88,7 +111,26 @@ function getRSS(url, apiKey) {
           ttl: "1"
         });
 
-        final_issues.reverse().forEach(i => add_issue(i, feed));
+        var template = fs.readFileSync(
+          path.resolve(__dirname, "./templates/default.mst"),
+          "utf8"
+        );
+
+        if (template) {
+          try {
+            template = fs.readFileSync(
+              path.resolve(
+                __dirname,
+                "./templates/" + (template || "default.mst")
+              ),
+              "utf8"
+            );
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        final_issues.reverse().forEach(i => add_issue(i, feed, template));
 
         resolve(feed.xml({ indent: true }));
       }, reject);
@@ -97,7 +139,7 @@ function getRSS(url, apiKey) {
 }
 
 app.get("*", function(req, res) {
-  getRSS(req.query.url, req.query.api_key).then(rss => {
+  getRSS(req.query.url, req.query.api_key, req.query.template).then(rss => {
     res.header("Content-Type", "application/rss+xml; charset=utf-8");
     res.send(rss);
   }, res.send.bind(res));

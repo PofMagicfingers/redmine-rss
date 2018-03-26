@@ -1,0 +1,37 @@
+<h2>
+    <a href="{{& issue_url }}">{{ tracker.name }} #{{id}}: {{subject}}</a>
+</h2>
+
+<ul>
+    <li>Auteur: {{ author.name }}</li>
+    <li>Status: {{ status.name }}</li>
+    <li>Priorité: {{ priority.name }}</li>
+    <li>Assigné à: {{ assigned_to.name }}</li>
+    <li>Version cible: {{ fixed_version.name }}</li>
+    {{ #custom_fields }} {{ #value }}
+    <li>{{name}}: {{ value }}</li>
+    {{ /value }} {{ /custom_fields }}
+</ul>
+
+<p>
+    {{ description }}
+</p>
+
+{{#journals}}
+<div>
+    <h6>
+        <span style="text-align: right;">
+            <a href="{{& url}}">#{{index}}</a>
+        </span>
+        <br/> {{ user.name }}
+    </h6>
+    {{ notes }}
+    <dl>
+        {{#details}}
+        <dt>{{ property }}.{{name}}</dt>
+        <dd>{{ old_value }} => {{ new_value }}</dd>
+        {{/details}}
+    </dl>
+
+</div>
+{{/journals}}
